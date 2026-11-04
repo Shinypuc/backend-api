@@ -1,0 +1,41 @@
+name: Sync backend-api -> monorepo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend-api/**"
+  workflow_dispatch: # permite rodar manualmente pela aba Actions
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do backend-api
+        uses: actions/checkout@v4
+        with:
+          path: origem
+
+      - name: Checkout do monorepo
+        uses: actions/checkout@v4
+        with:
+          repository: Shinypuc/pi4-2026-2-0102-grupo2
+          token: ${{ secrets.MONOREPO_TOKEN }}
+          path: monorepo
+
+      - name: Copiar backend-api para o monorepo
+        run: |
+          rsync -a --delete --exclude 'out/' origem/backend-api/ monorepo/backend-api/
+
+      - name: Commit e push no monorepo
+        working-directory: monorepo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend-api
+          if git diff --cached --quiet; then
+            echo "Nada mudou, nada a enviar."
+            exit 0
+          fi
+          git commit -m "sync(backend-api): ${{ github.event.head_commit.message || 'sync manual' }}"
+          git push
