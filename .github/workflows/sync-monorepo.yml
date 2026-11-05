@@ -19,7 +19,7 @@ jobs:
       - name: Checkout do monorepo
         uses: actions/checkout@v4
         with:
-          repository: Shinypuc/pi4-2026-2-0102-grupo2
+          repository: cauagreccodev/pi4-2026-2-0102-grupo2
           token: ${{ secrets.MONOREPO_TOKEN }}
           path: monorepo
 

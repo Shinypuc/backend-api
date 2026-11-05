@@ -49,7 +49,7 @@ public class TicketDao {
     }
 
     public Ticket insert(Ticket ticket) {
-        String sql = "INSERT INTO tickets (title, description, priority, category_id, client_id) VALUES (?, ?, ?, ?, ?) RETURNING *";
+        String sql = "INSERT INTO tickets (title, description, priority, category_id, client_id, support_id, status) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *";
         Connection conn = null;
         try {
             conn = Database.getConnection();
@@ -59,6 +59,9 @@ public class TicketDao {
                 stmt.setString(3, ticket.getPriority());
                 stmt.setInt(4, ticket.getCategoryId());
                 stmt.setInt(5, ticket.getClientId());
+                if (ticket.getSupportId() == null) stmt.setNull(6, java.sql.Types.INTEGER);
+                else stmt.setInt(6, ticket.getSupportId());
+                stmt.setString(7, "NEW");
                 
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
@@ -190,6 +193,52 @@ public class TicketDao {
             Database.releaseConnection(conn);
         }
         return false;
+    }
+
+    public boolean update(Ticket ticket) throws SQLException {
+        String sql = "UPDATE tickets SET title = ?, description = ?, priority = ?, category_id = ?, " +
+            "status = ?, support_id = ?, updated_at = CURRENT_TIMESTAMP, " +
+            "closed_at = CASE WHEN ? IN ('CLOSED', 'UNRESOLVED') THEN COALESCE(closed_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = ?";
+        Connection conn = null;
+        try {
+            conn = Database.getConnection();
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, ticket.getTitle());
+                stmt.setString(2, ticket.getDescription());
+                stmt.setString(3, ticket.getPriority());
+                stmt.setInt(4, ticket.getCategoryId());
+                stmt.setString(5, ticket.getStatus());
+                if (ticket.getSupportId() == null) stmt.setNull(6, java.sql.Types.INTEGER);
+                else stmt.setInt(6, ticket.getSupportId());
+                stmt.setString(7, ticket.getStatus());
+                stmt.setInt(8, ticket.getId());
+                return stmt.executeUpdate() > 0;
+            }
+        } finally {
+            Database.releaseConnection(conn);
+        }
+    }
+
+    // The conditional update and history insert are one atomic PostgreSQL statement.
+    // Two technicians opening the same NEW ticket cannot both claim it.
+    public boolean startService(int id, int technicianId, String message) throws SQLException {
+        String sql = "WITH started AS (UPDATE tickets SET status = 'ASSIGNED', support_id = ?, " +
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'NEW' RETURNING id) " +
+            "INSERT INTO ticket_timeline (ticket_id, author_id, event_type, message) " +
+            "SELECT id, ?, 'STATUS_CHANGE', ? FROM started";
+        Connection conn = null;
+        try {
+            conn = Database.getConnection();
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setInt(1, technicianId);
+                stmt.setInt(2, id);
+                stmt.setInt(3, technicianId);
+                stmt.setString(4, message);
+                return stmt.executeUpdate() > 0;
+            }
+        } finally {
+            Database.releaseConnection(conn);
+        }
     }
 
     public boolean updateStatus(int id, String newStatus, Integer newSupportId) {
