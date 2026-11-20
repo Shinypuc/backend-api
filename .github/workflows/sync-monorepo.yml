@@ -25,7 +25,7 @@ jobs:
 
       - name: Copiar backend-api para o monorepo
         run: |
-          rsync -a --delete --exclude 'out/' origem/backend-api/ monorepo/backend-api/
+          rsync -a --exclude 'out/' origem/backend-api/ monorepo/backend-api/
 
       - name: Commit e push no monorepo
         working-directory: monorepo
